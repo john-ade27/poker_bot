@@ -6,6 +6,11 @@ site-src/node_modules/
 event/
 site_out/
 
+# Local only: test pickles, saved bot versions, offline scripts.
+*.pkl
+bots/
+tools/
+
 # The front end (the results web page) is kept by the organiser, not here.
 /site/
 /site-src/
