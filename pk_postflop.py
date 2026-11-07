@@ -17,18 +17,6 @@ from pk_opponent import fold_to_bet, labels, lam, rate, seen
 
 NB = 10  # strength bands of the opponent's range
 
-DEFAULTS = {
-    "post_sizes": (0.33, 0.66, 1.0),  # bet sizes, share of the pot
-    "post_value_margin": 0.02,  # taken off eq_called for bets
-    "post_allin_margin": 0.02,  # calling an all-in: equity > price + this
-    "post_spr_allin": 1.5,  # SPR at or below this with eq >= post_spr_eq:
-    "post_spr_eq": 0.55,  # all in
-    "post_bluff_eq": 0.35,  # a bet below this equity is a bluff, made only
-    "post_bluff_fold": 0.50,  # when they fold to it at least this often
-    "post_maniac_check_eq": 0.75,  # vs maniacs: check, don't bet, below
-    "mc_budget": 0.06,  # seconds of Monte Carlo per decision
-    "mc_samples": 2000,  # Monte Carlo samples at most
-}
 
 
 def bet_total(gs, me, frac):
@@ -101,8 +89,13 @@ def decide(model, gs, me, opp, start):
                 f = fold_to_bet(stats, add / max(1, pot))
             else:
                 f = rate(stats, "fold_raise")
-            if total == high and seen(stats, "call_allin") >= 2:
-                f = 1.0 - rate(stats, "call_allin")
+            if total == high:
+                # All in mainly for value: count on folds to it only once
+                # measured; many bots call all-ins wide.
+                if seen(stats, "call_allin") >= p["allin_seen"]:
+                    f = 1.0 - rate(stats, "call_allin")
+                else:
+                    f = min(f, p["allin_fold_unseen"])
             f = min(max(f, 0.0), 0.95)
             eqc = eq_top(1.0 - f) - p["post_value_margin"]
             ev = f * pot + (1.0 - f) * (eqc * (pot + add + opp_call) - add)

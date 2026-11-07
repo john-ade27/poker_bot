@@ -16,40 +16,59 @@ from pk_cards import class_of
 from pk_equity import hand_value
 from pk_ranges import PERCENTILE
 
-K = 10.0  # shrinkage: a statistic counts as K chances at its prior
+# The statistics kept. Every number of the opponent model (shrinkage k,
+# the priors, bet-size buckets, label evidence, exploit blending) lives in
+# model.PARAMS; the model hands them over with configure() before use.
+STATS = (
+    "btn_fold",
+    "btn_limp",
+    "btn_raise",
+    "btn_allin",
+    "bb_fold",
+    "bb_call",
+    "bb_raise",
+    "bb_allin",
+    "limp_raise",
+    "vs3b_fold",
+    "vs3b_call",
+    "vs3b_raise",
+    "call_allin",
+    "bet",
+    "fold_small",
+    "fold_medium",
+    "fold_large",
+    "fold_raise",
+    "raise_vs_bet",
+    "call_vs_bet",
+    "bluff",
+    "call_weak",
+    "pf_noise",
+)
+K = None  # shrinkage: a statistic counts as K chances at its prior
+PRIORS = {}  # statistic -> prior rate
+SMALL = None  # bet-size buckets, share of the pot before the bet
+MEDIUM = None
+MIN_SEEN = None  # chances a label needs before it is used
+LAM_N = None  # exploits are trusted n / (n + LAM_N) after n hands
 
-PRIORS = {
-    # Preflop, opponent on the button, first move.
-    "btn_fold": 0.25, "btn_limp": 0.10, "btn_raise": 0.60, "btn_allin": 0.05,
-    # Preflop, opponent in the big blind facing our open.
-    "bb_fold": 0.35, "bb_call": 0.45, "bb_raise": 0.15, "bb_allin": 0.05,
-    # Big blind facing our limp: raises.
-    "limp_raise": 0.30,
-    # Facing our re-raise preflop (not all in): fold, call, raise again.
-    "vs3b_fold": 0.50, "vs3b_call": 0.30, "vs3b_raise": 0.20,
-    # Facing our all-in, any street: calls.
-    "call_allin": 0.30,
-    # Postflop: bets when nobody has bet yet this street.
-    "bet": 0.40,
-    # Postflop, facing a bet: folds by size (share of the pot), raises.
-    "fold_small": 0.35, "fold_medium": 0.40, "fold_large": 0.45,
-    "fold_raise": 0.35,  # facing our raise of their bet
-    "raise_vs_bet": 0.10,
-    "call_vs_bet": 0.50,
-    # Showdowns: their postflop bets/raises, and calls, with a weak hand.
-    "bluff": 0.25,
-    "call_weak": 0.25,
-    # Showdowns: their preflop raises from outside their presumed range.
-    "pf_noise": 0.10,
-}
 
-SMALL = 0.45  # bet sizes, share of the pot before the bet
-MEDIUM = 0.85
+def configure(params):
+    """Takes the opponent model's numbers from the model's PARAMS."""
+    global K, SMALL, MEDIUM, MIN_SEEN, LAM_N
+    K = params["shrink_k"]
+    SMALL = params["size_small"]
+    MEDIUM = params["size_medium"]
+    MIN_SEEN = params["min_seen"]
+    LAM_N = params["lam_n"]
+    for name in STATS:
+        PRIORS[name] = params["prior_" + name]
 
 
 def new_stats():
-    stats = {name: [0, 0] for name in PRIORS}
+    stats = {name: [0, 0] for name in STATS}
     stats["hands"] = 0
+    stats["me_allin"] = [0, 0]  # our own preflop all-ins, per hand
+    stats["me_vpip"] = [0, 0]  # our own voluntary preflop chips
     return stats
 
 
@@ -78,9 +97,9 @@ def seen(stats, name):
 
 
 def lam(stats):
-    """How far to trust exploits: n / (n + 30) after n hands."""
+    """How far to trust exploits: n / (n + LAM_N) after n hands."""
     n = stats["hands"]
-    return n / (n + 30.0)
+    return n / (n + LAM_N)
 
 
 def size_bucket(frac):
@@ -98,7 +117,6 @@ def fold_to_bet(stats, frac):
 # -- labels -------------------------------------------------------------------
 
 
-MIN_SEEN = 15  # chances a label needs before it is used: strong evidence
 
 
 def labels(stats):
@@ -312,6 +330,15 @@ def update(stats, model, gs, opp):
               ["raise_vs_bet"])
         _bump(stats, "call_vs_bet" if kind == "call" else None,
               ["call_vs_bet"])
+
+    # Our own preflop image: all-in rate and VPIP (what their detectors see).
+    mine = [r for r in records if r[0] == me and r[1] == "preflop"]
+    if mine and "me_allin" in stats:
+        allin = any(r[2] == "raise" and r[10] for r in mine)
+        vpip = any(r[2] == "raise" or (r[2] == "call" and r[4] > 0)
+                   for r in mine)
+        _bump(stats, "me_allin" if allin else None, ["me_allin"])
+        _bump(stats, "me_vpip" if vpip else None, ["me_vpip"])
 
     shown = model.shown.get(opp)
     if shown and len(shown) == 2 and len(model.board) == 5:

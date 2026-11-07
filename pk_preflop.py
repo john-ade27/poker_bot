@@ -10,28 +10,11 @@ it legal). ALL_IN asks for every chip.
 from pk_cards import class_of
 from pk_equity import preflop_equity
 from pk_estimate import preflop_classes
-from pk_opponent import MIN_SEEN, labels, lam, rate, seen
+from pk_opponent import labels, lam, rate, seen
 from pk_ranges import PERCENTILE, top_weights
 
 ALL_IN = 10 ** 9
 
-DEFAULTS = {
-    "open_pct": 0.70,  # button: raise this share of hands, fold the rest
-    "open_size": 2.2,  # big blinds
-    "bb_shove_eq": 0.58,  # big blind vs an open of 3 bb or less: all in
-    # when equity against their opening range is at least this
-    "bb_call_pct": 0.65,  # call with hands up to this percentile
-    "bb_call_margin": 0.06,  # when equity > price + this
-    "big_raise_bb": 8.0,  # a raise above this is treated like an all-in
-    "limp_raise_pct": 0.30,  # big blind vs a limp
-    "limp_raise_size": 3.5,
-    "allin_margin": 0.02,  # call an all-in when equity > price + this
-    "call_margin": 0.05,  # pot-odds calls of small re-raises
-    "station_call_allin": 0.60,  # they call all-ins this often: shove
-    "station_shove_ev": 0.5,  # for value when it wins this many bb
-    "station_limp_pct": 0.85,  # and limp these hands otherwise
-    "stat_decay": 0.99,  # opponent counts are multiplied by this each hand
-}
 
 
 def preflop_actions(history, player):
@@ -68,7 +51,35 @@ def call_allin_chance(stats):
     return rate(stats, "call_allin", min(0.9, max(0.15, guess)))
 
 
+def own_rate(stats, name, default):
+    """Our own rate (hits / chances), or default before 20 chances."""
+    pair = stats.get(name)
+    if not pair or pair[1] < 20:
+        return default
+    return pair[0] / pair[1]
+
+
 def decide(model, gs, me, opp):
+    """_decide, then: keep our preflop all-in rate under allin_rate_cap
+    (raise or call instead), unless the opponent is clearly a folder, so
+    other bots' detectors do not take us for a shove dummy."""
+    kind, total = _decide(model, gs, me, opp)
+    if kind != "raise" or total < ALL_IN:
+        return kind, total
+    if gs.stacks[opp] == 0 or not gs.can_raise:
+        return kind, total  # calling their all-in is not ours
+    p = model.params
+    stats = model.opp_stats(gs, opp)
+    if "folder" in labels(stats):
+        return kind, total
+    if own_rate(stats, "me_allin", 0.0) < p["allin_rate_cap"]:
+        return kind, total
+    if gs.call_amount == 0 or gs.bets[me] < gs.big_blind:
+        return "raise", round(p["open_size"] * gs.big_blind)
+    return "call", 0
+
+
+def _decide(model, gs, me, opp):
     p = model.params
     stats = model.opp_stats(gs, opp)
     labs = labels(stats)
@@ -89,7 +100,11 @@ def decide(model, gs, me, opp):
     if not button and not acted:
         if to_call == 0:
             # The button limped.
-            if pct <= p["limp_raise_pct"]:
+            limp_pct = p["limp_raise_pct"]
+            if ("folder" not in labs
+                    and own_rate(stats, "me_vpip", 1.0) < p["vpip_floor"]):
+                limp_pct = max(limp_pct, p["vpip_floor"])
+            if pct <= limp_pct:
                 return "raise", round(p["limp_raise_size"] * bb)
             return "call", 0
         their = preflop_classes(model, gs, me, opp, stats)
@@ -132,7 +147,7 @@ def _open(model, gs, me, opp, stats, labs, exploit, pct):
     if exploit:
         calls = call_allin_chance(stats)
         evidence = (seen(stats, "call_allin") >= 8
-                    or seen(stats, "bb_fold") >= MIN_SEEN)
+                    or seen(stats, "bb_fold") >= p["min_seen"])
         if evidence and calls >= p["station_call_allin"]:
             # They call too much: all in when ahead of their calling range.
             eq = preflop_equity(model.hole, top_weights(calls))
