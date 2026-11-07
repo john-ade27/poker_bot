@@ -44,17 +44,18 @@ def allin_rule(model, gs, me, opp, weights, margin):
     return "fold", 0
 
 
-def call_allin_chance(stats):
+def call_allin_chance(stats, p):
     """How often they call an all-in: their record when they have one,
     otherwise guessed from how rarely they fold to an open."""
-    guess = 1.0 - rate(stats, "bb_fold") - 0.1
-    return rate(stats, "call_allin", min(0.9, max(0.15, guess)))
+    guess = 1.0 - rate(stats, "bb_fold") - p["station_guess_drop"]
+    guess = min(p["station_guess_max"], max(p["station_guess_min"], guess))
+    return rate(stats, "call_allin", guess)
 
 
-def own_rate(stats, name, default):
+def own_rate(stats, name, default, need=20):
     """Our own rate (hits / chances), or default before 20 chances."""
     pair = stats.get(name)
-    if not pair or pair[1] < 20:
+    if not pair or pair[1] < need:
         return default
     return pair[0] / pair[1]
 
@@ -72,7 +73,7 @@ def decide(model, gs, me, opp):
     stats = model.opp_stats(gs, opp)
     if "folder" in labels(stats):
         return kind, total
-    if own_rate(stats, "me_allin", 0.0) < p["allin_rate_cap"]:
+    if own_rate(stats, "me_allin", 0.0, p["own_seen"]) < p["allin_rate_cap"]:
         return kind, total
     if gs.call_amount == 0 or gs.bets[me] < gs.big_blind:
         return "raise", round(p["open_size"] * gs.big_blind)
@@ -102,7 +103,8 @@ def _decide(model, gs, me, opp):
             # The button limped.
             limp_pct = p["limp_raise_pct"]
             if ("folder" not in labs
-                    and own_rate(stats, "me_vpip", 1.0) < p["vpip_floor"]):
+                    and own_rate(stats, "me_vpip", 1.0, p["own_seen"])
+                    < p["vpip_floor"]):
                 limp_pct = max(limp_pct, p["vpip_floor"])
             if pct <= limp_pct:
                 return "raise", round(p["limp_raise_size"] * bb)
@@ -111,14 +113,14 @@ def _decide(model, gs, me, opp):
         if opp_all_in or opp_bet > p["big_raise_bb"] * bb:
             return allin_rule(model, gs, me, opp, their, p["allin_margin"])
         eq = preflop_equity(hole, their)
-        if opp_bet <= 3 * bb:
+        if opp_bet <= p["small_open_bb"] * bb:
             if eq >= p["bb_shove_eq"]:
                 return "raise", ALL_IN
             if pct <= p["bb_call_pct"] and eq > gs.pot_odds + p[
                     "bb_call_margin"]:
                 return "call", 0
             return "fold", 0
-        if eq >= p["bb_shove_eq"] + 0.03:
+        if eq >= p["bb_shove_eq"] + p["big_open_extra"]:
             return "raise", ALL_IN
         return "fold", 0
 
@@ -126,7 +128,7 @@ def _decide(model, gs, me, opp):
     if to_call == 0:
         return "call", 0
     their = preflop_classes(model, gs, me, opp, stats)
-    if opp_all_in or 3 * to_call >= my_stack:
+    if opp_all_in or p["commit_div"] * to_call >= my_stack:
         return allin_rule(model, gs, me, opp, their, p["allin_margin"])
     kind, total = allin_rule(model, gs, me, opp, their, p["allin_margin"])
     if kind == "raise":
@@ -145,8 +147,8 @@ def _open(model, gs, me, opp, stats, labs, exploit, pct):
     if exploit and "folder" in labs:
         return "raise", open_to  # they fold: raise every hand
     if exploit:
-        calls = call_allin_chance(stats)
-        evidence = (seen(stats, "call_allin") >= 8
+        calls = call_allin_chance(stats, p)
+        evidence = (seen(stats, "call_allin") >= p["station_allin_seen"]
                     or seen(stats, "bb_fold") >= p["min_seen"])
         if evidence and calls >= p["station_call_allin"]:
             # They call too much: all in when ahead of their calling range.

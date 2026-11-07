@@ -50,6 +50,7 @@ SMALL = None  # bet-size buckets, share of the pot before the bet
 MEDIUM = None
 MIN_SEEN = None  # chances a label needs before it is used
 LAM_N = None  # exploits are trusted n / (n + LAM_N) after n hands
+L = {}  # label thresholds and the like, from PARAMS
 
 
 def configure(params):
@@ -62,6 +63,11 @@ def configure(params):
     LAM_N = params["lam_n"]
     for name in STATS:
         PRIORS[name] = params["prior_" + name]
+    for name in ("label_folder", "label_station_call",
+                 "label_station_fold", "label_maniac", "label_maniac_bet",
+                 "label_random_seen", "label_random_bluff",
+                 "weak_strength", "noise_slack"):
+        L[name] = params[name]
 
 
 def new_stats():
@@ -129,24 +135,27 @@ def labels(stats):
     folds = [(rate(stats, name), seen(stats, name))
              for name in ("bb_fold", "fold_medium", "fold_large")]
     with_data = [f for f, n in folds if n >= MIN_SEEN]
-    if with_data and min(with_data) >= 0.75:
+    if with_data and min(with_data) >= L["label_folder"]:
         out.add("folder")
     if (seen(stats, "call_vs_bet") >= MIN_SEEN
-            and rate(stats, "call_vs_bet") >= 0.70
-            and rate(stats, "fold_medium") <= 0.20
-            and rate(stats, "fold_small") <= 0.20):
+            and rate(stats, "call_vs_bet") >= L["label_station_call"]
+            and rate(stats, "fold_medium") <= L["label_station_fold"]
+            and rate(stats, "fold_small") <= L["label_station_fold"]):
         out.add("station")
     if (seen(stats, "bb_raise") >= MIN_SEEN
-            and rate(stats, "bb_raise") + rate(stats, "bb_allin") >= 0.5):
+            and rate(stats, "bb_raise") + rate(stats, "bb_allin")
+            >= L["label_maniac"]):
         out.add("pf_maniac")
     if (seen(stats, "btn_raise") >= MIN_SEEN
-            and rate(stats, "btn_allin") >= 0.5):
+            and rate(stats, "btn_allin") >= L["label_maniac"]):
         out.add("pf_maniac")
-    if ((seen(stats, "bet") >= 2 * MIN_SEEN and rate(stats, "bet") >= 0.75)
+    if ((seen(stats, "bet") >= 2 * MIN_SEEN
+         and rate(stats, "bet") >= L["label_maniac_bet"])
             or (seen(stats, "raise_vs_bet") >= MIN_SEEN
-                and rate(stats, "raise_vs_bet") >= 0.5)):
+                and rate(stats, "raise_vs_bet") >= L["label_maniac"])):
         out.add("maniac")
-    if seen(stats, "bluff") >= 10 and rate(stats, "bluff") >= 0.40:
+    if (seen(stats, "bluff") >= L["label_random_seen"]
+            and rate(stats, "bluff") >= L["label_random_bluff"]):
         out.add("random")
     return out
 
@@ -344,7 +353,7 @@ def update(stats, model, gs, opp):
     if shown and len(shown) == 2 and len(model.board) == 5:
         hole = (shown[0], shown[1])
         strength = river_strength(hole, model.board)
-        weak = strength < 0.5
+        weak = strength < L["weak_strength"]
         pf_raised = False
         for rec in records:
             pid, street, kind = rec[0], rec[1], rec[2]
@@ -363,7 +372,8 @@ def update(stats, model, gs, opp):
             # noise: how often they raise tells us how wide that range is.
             x = preflop_raise_share(stats, opp == button)
             pct = PERCENTILE[class_of(hole[0], hole[1])]
-            _bump(stats, "pf_noise" if pct > min(1.0, x + 0.05) else None,
+            _bump(stats, "pf_noise" if pct > min(1.0, x + L["noise_slack"])
+                  else None,
                   ["pf_noise"])
 
 

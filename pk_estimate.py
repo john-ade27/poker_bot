@@ -18,7 +18,6 @@ from pk_equity import hand_value
 from pk_opponent import contributions, fold_to_bet, preflop_raise_share, rate
 from pk_ranges import RANKING, band_weights, top_weights
 
-FLOOR = 0.03  # a range is never narrower than this share of hands
 
 
 def _mix(weights, noise):
@@ -49,6 +48,8 @@ _SIZE = CLASS_SIZE
 def preflop_classes(model, gs, me, opp, stats):
     """169 class weights for the opponent's hand, from their preflop
     actions this hand."""
+    p = model.params
+    floor = p["range_floor"]
     theirs = [(kind, amount) for pid, kind, amount, street in model.history
               if pid == opp and street == "preflop"]
     mine = [kind for pid, kind, amount, street in model.history
@@ -66,40 +67,40 @@ def preflop_classes(model, gs, me, opp, stats):
         limp = rate(stats, "btn_limp")
         if first == "raise":
             if all_in_now and len(theirs) == 1:
-                w = top_weights(max(FLOOR, a))
+                w = top_weights(max(floor, a))
             else:
-                w = top_weights(max(FLOOR, r + a))
+                w = top_weights(max(floor, r + a))
         else:  # a limp: the hands they neither raise nor fold, a few traps
             w = band_weights(r + a, min(1.0, r + a + limp))
             trap = top_weights(r + a)
-            w = [x + 0.1 * t for x, t in zip(w, trap)]
+            w = [x + p["trap_limp"] * t for x, t in zip(w, trap)]
     elif mine and mine[0] == "call":  # they are the big blind; we limped
         lr = rate(stats, "limp_raise")
         if first == "raise":
-            w = top_weights(max(FLOOR, lr))
+            w = top_weights(max(floor, lr))
         else:
             w = band_weights(lr, 1.0)
             trap = top_weights(lr)
-            w = [x + 0.15 * t for x, t in zip(w, trap)]
+            w = [x + p["trap_check"] * t for x, t in zip(w, trap)]
     else:  # they are the big blind facing our raise
         t = rate(stats, "bb_raise")
         a = rate(stats, "bb_allin")
         c = rate(stats, "bb_call")
         if first == "raise":
             if all_in_now and len(theirs) == 1:
-                w = top_weights(max(FLOOR, a))
+                w = top_weights(max(floor, a))
             else:
-                w = top_weights(max(FLOOR, t + a))
+                w = top_weights(max(floor, t + a))
         else:
             w = band_weights(t + a, min(1.0, t + a + c))
             trap = top_weights(t + a)
-            w = [x + 0.1 * tt for x, tt in zip(w, trap)]
+            w = [x + p["trap_call"] * tt for x, tt in zip(w, trap)]
     # Later preflop moves: a re-raise is stronger, a call of ours a bit.
     for kind, amount in theirs[1:]:
         if kind == "raise":
-            w = _narrow_classes(w, 0.45, 0.15)
+            w = _narrow_classes(w, p["reraise_keep"], p["reraise_rest"])
         elif kind == "call":
-            w = _narrow_classes(w, 0.75, 0.4)
+            w = _narrow_classes(w, p["recall_keep"], p["recall_rest"])
     return _mix(w, noise)
 
 
@@ -190,8 +191,8 @@ def combo_range(model, gs, me, opp, stats):
                     _keep_top(weights, order, pct, keep, rest)
                 elif kind == "call":
                     for i in order:
-                        if pct[i] < 0.12:
-                            weights[i] *= 0.7
+                        if pct[i] < model.params["check_top"]:
+                            weights[i] *= model.params["check_discount"]
                 pct = _percentiles(order, weights)
             if kind == "raise":
                 pot += amount - bets[pid]

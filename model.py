@@ -59,6 +59,37 @@ PARAMS = {
     "stat_decay": 0.99,  # every count is multiplied by this each hand
     "size_small": 0.45,  # bet-size buckets, share of the pot: small up to
     "size_medium": 0.85,  # this, medium up to this, large above
+    "eq_top_min": 0.05,  # eq_called is against at least this top share
+    "fold_cap": 0.95,  # fold chances are never counted above this
+    "small_open_bb": 3.0,  # BB: an open up to this many bb is "small"
+    "big_open_extra": 0.03,  # BB jam vs a bigger open needs this more eq
+    "commit_div": 3,  # a call of 1 / commit_div of our stack commits us
+    "station_guess_drop": 0.1,  # guessed call-all-in rate: 1 - their fold
+    "station_guess_min": 0.15,  # to an open - drop, kept in min..max
+    "station_guess_max": 0.9,
+    "station_allin_seen": 8,  # or all-ins seen, before shoving for value
+    "own_seen": 20,  # our own rates count from this many hands
+    # Reading their range (BRIEF 5.3).
+    "range_floor": 0.03,  # a range is never narrower than this share
+    "trap_limp": 0.1,  # a limp range keeps this much of the raise range
+    "trap_check": 0.15,  # BB check after our limp: likewise
+    "trap_call": 0.1,  # BB call of our open: likewise
+    "reraise_keep": 0.45,  # a later preflop re-raise keeps their best
+    "reraise_rest": 0.15,  # share at full weight, the rest times this
+    "recall_keep": 0.75,  # calling our re-raise: likewise
+    "recall_rest": 0.4,
+    "check_top": 0.12,  # a postflop check discounts the top share
+    "check_discount": 0.7,  # of their range by this factor
+    # Labels (strong evidence only).
+    "label_folder": 0.75,  # folds to opens and bets at least this often
+    "label_station_call": 0.70,  # calls bets at least this often and
+    "label_station_fold": 0.20,  # folds to small/medium bets at most this
+    "label_maniac": 0.5,  # re-raises, shoves or raises at least this
+    "label_maniac_bet": 0.75,  # bets when checked to at least this often
+    "label_random_seen": 10,  # showdowns needed, and the bluff rate,
+    "label_random_bluff": 0.40,  # for "random"
+    "weak_strength": 0.5,  # a shown hand below this river strength: weak
+    "noise_slack": 0.05,  # a preflop raise this far outside the range
     # Priors: a sensible player's rates (fold to an open, fold to a bet...).
     "prior_btn_fold": 0.25,
     "prior_btn_limp": 0.10,

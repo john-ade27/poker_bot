@@ -43,7 +43,7 @@ def decide(model, gs, me, opp, start):
         """Our equity against the strongest q share of their range."""
         if q >= 0.999:
             return eq
-        edge = max(q, 0.05) * NB
+        edge = max(q, p["eq_top_min"]) * NB
         won = 0.0
         seen_ = 0.0
         for g in range(NB):
@@ -96,7 +96,7 @@ def decide(model, gs, me, opp, start):
                     f = 1.0 - rate(stats, "call_allin")
                 else:
                     f = min(f, p["allin_fold_unseen"])
-            f = min(max(f, 0.0), 0.95)
+            f = min(max(f, 0.0), p["fold_cap"])
             eqc = eq_top(1.0 - f) - p["post_value_margin"]
             ev = f * pot + (1.0 - f) * (eqc * (pot + add + opp_call) - add)
             options.append((ev, "raise", total, f))
