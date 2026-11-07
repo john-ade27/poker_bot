@@ -10,6 +10,7 @@ import random
 import time
 
 import pk_cards
+import pk_opponent
 import pk_postflop
 import pk_preflop
 from player_action import PlayerAction
@@ -76,9 +77,22 @@ class Model:
     def end_game(self, actions, game_state):
         try:
             self._record(actions)
+            if game_state.num_players == 2 and self.hole is not None:
+                opp = 1 - self.player_id
+                stats = self.opp_stats(game_state, opp)
+                pk_opponent.update(stats, self, game_state, opp)
         except Exception:
             if self.debug:
                 raise
+
+    def opp_stats(self, gs, opp):
+        """The statistics kept on the opponent's team (made on first use)."""
+        name = gs.teams[opp]
+        stats = self.opp.get(name)
+        if stats is None:
+            stats = pk_opponent.new_stats()
+            self.opp[name] = stats
+        return stats
 
     # -- per-hand bookkeeping ------------------------------------------------
 
