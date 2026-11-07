@@ -81,32 +81,37 @@ def fold_to_bet(stats, frac):
 # -- labels -------------------------------------------------------------------
 
 
+MIN_SEEN = 15  # chances a label needs before it is used: strong evidence
+
+
 def labels(stats):
-    """The set of labels that apply now (shrunk statistics)."""
+    """The set of labels that apply now, each on strong evidence only: at
+    least MIN_SEEN chances in that spot and the shrunk rate past the line.
+    "pf_maniac" (re-raises or shoves preflop) and "maniac" (bets or raises
+    after the flop) are kept apart, so postflop betting alone never
+    changes how we open."""
     out = set()
-    folds = [rate(stats, "bb_fold"), rate(stats, "fold_medium"),
-             rate(stats, "fold_large")]
-    seen_folds = [seen(stats, "bb_fold"), seen(stats, "fold_medium"),
-                  seen(stats, "fold_large")]
-    # Judge by the statistics that have data.
-    with_data = [f for f, n in zip(folds, seen_folds) if n >= 3]
+    folds = [(rate(stats, name), seen(stats, name))
+             for name in ("bb_fold", "fold_medium", "fold_large")]
+    with_data = [f for f, n in folds if n >= MIN_SEEN]
     if with_data and min(with_data) >= 0.75:
         out.add("folder")
-    calls = rate(stats, "call_vs_bet")
-    small_fold = rate(stats, "fold_small")
-    if (seen(stats, "call_vs_bet") >= 3 and calls >= 0.70
-            and rate(stats, "fold_medium") <= 0.20 and small_fold <= 0.20):
+    if (seen(stats, "call_vs_bet") >= MIN_SEEN
+            and rate(stats, "call_vs_bet") >= 0.70
+            and rate(stats, "fold_medium") <= 0.20
+            and rate(stats, "fold_small") <= 0.20):
         out.add("station")
-    aggressive = []
-    if seen(stats, "btn_raise") >= 3:
-        aggressive.append(rate(stats, "btn_allin"))
-    if seen(stats, "bb_raise") >= 3:
-        aggressive.append(rate(stats, "bb_raise") + rate(stats, "bb_allin"))
-    if seen(stats, "bet") >= 3:
-        aggressive.append(rate(stats, "bet"))
-    if aggressive and max(aggressive) >= 0.5:
+    if (seen(stats, "bb_raise") >= MIN_SEEN
+            and rate(stats, "bb_raise") + rate(stats, "bb_allin") >= 0.5):
+        out.add("pf_maniac")
+    if (seen(stats, "btn_raise") >= MIN_SEEN
+            and rate(stats, "btn_allin") >= 0.5):
+        out.add("pf_maniac")
+    if ((seen(stats, "bet") >= 2 * MIN_SEEN and rate(stats, "bet") >= 0.75)
+            or (seen(stats, "raise_vs_bet") >= MIN_SEEN
+                and rate(stats, "raise_vs_bet") >= 0.5)):
         out.add("maniac")
-    if seen(stats, "bluff") >= 4 and rate(stats, "bluff") >= 0.40:
+    if seen(stats, "bluff") >= 10 and rate(stats, "bluff") >= 0.40:
         out.add("random")
     return out
 

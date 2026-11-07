@@ -10,7 +10,7 @@ it legal). ALL_IN asks for every chip.
 from pk_cards import class_of
 from pk_equity import preflop_equity
 from pk_estimate import preflop_classes
-from pk_opponent import labels, lam, rate
+from pk_opponent import MIN_SEEN, labels, lam, rate, seen
 from pk_ranges import PERCENTILE, top_weights
 
 ALL_IN = 10 ** 9
@@ -130,7 +130,9 @@ def _open(model, gs, me, opp, stats, labs, exploit, pct):
         return "raise", open_to  # they fold: raise every hand
     if exploit:
         calls = call_allin_chance(stats)
-        if calls >= p["station_call_allin"]:
+        evidence = (seen(stats, "call_allin") >= 8
+                    or seen(stats, "bb_fold") >= MIN_SEEN)
+        if evidence and calls >= p["station_call_allin"]:
             # They call too much: all in when ahead of their calling range.
             eq = preflop_equity(model.hole, top_weights(calls))
             my_add, final_pot = allin_amounts(gs, me, opp)
@@ -140,7 +142,7 @@ def _open(model, gs, me, opp, stats, labs, exploit, pct):
             if pct <= p["station_limp_pct"]:
                 return "call", 0
             return "fold", 0
-        if "maniac" in labs:
+        if "pf_maniac" in labs:
             # They re-raise most opens: open only what can call it.
             reraise = rate(stats, "bb_raise") + rate(stats, "bb_allin")
             weights = top_weights(max(0.05, reraise))
