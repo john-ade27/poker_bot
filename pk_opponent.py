@@ -75,6 +75,9 @@ def new_stats():
     stats["hands"] = 0
     stats["me_allin"] = [0, 0]  # our own preflop all-ins, per hand
     stats["me_vpip"] = [0, 0]  # our own voluntary preflop chips
+    # Sizing tells: their bets by size, shown weak at a showdown.
+    for size in ("small", "medium", "large"):
+        stats["bluff_" + size] = [0, 0]
     return stats
 
 
@@ -114,6 +117,13 @@ def size_bucket(frac):
     if frac <= MEDIUM:
         return "fold_medium"
     return "fold_large"
+
+
+def tell_key(amount, pot, to_call):
+    """The sizing-tell statistic for a bet or raise to amount (street
+    total), made into pot after facing to_call."""
+    size = amount / max(1, pot + to_call)
+    return size_bucket(size).replace("fold_", "bluff_")
 
 
 def fold_to_bet(stats, frac):
@@ -365,6 +375,9 @@ def update(stats, model, gs, opp):
                 continue
             if kind == "raise":
                 _bump(stats, "bluff" if weak else None, ["bluff"])
+                key = tell_key(rec[3], rec[5], rec[4])
+                if key in stats:
+                    _bump(stats, key if weak else None, [key])
             elif kind == "call":
                 _bump(stats, "call_weak" if weak else None, ["call_weak"])
         if pf_raised:

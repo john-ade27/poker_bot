@@ -15,7 +15,8 @@ strongest.
 
 from pk_cards import CLASS_SIZE, COMBO_CLASS, COMBOS
 from pk_equity import hand_value
-from pk_opponent import contributions, fold_to_bet, preflop_raise_share, rate
+from pk_opponent import (contributions, fold_to_bet, preflop_raise_share,
+                         rate, tell_key)
 from pk_ranges import RANKING, band_weights, top_weights
 
 
@@ -183,7 +184,11 @@ def combo_range(model, gs, me, opp, stats):
                         a = rate(stats, "bet")
                     else:
                         a = rate(stats, "raise_vs_bet")
-                    _keep_top(weights, order, pct, a, _bluff_factor(a, beta))
+                    # Sizing tell: how often bets of this size were weak.
+                    key = tell_key(amount, pot, to_call)
+                    beta_size = rate(stats, key, beta) if key in stats else beta
+                    _keep_top(weights, order, pct, a,
+                              _bluff_factor(a, beta_size))
                 elif kind == "call" and to_call > 0:
                     f = fold_to_bet(stats, to_call / max(1, pot - to_call))
                     keep = 1.0 - f
