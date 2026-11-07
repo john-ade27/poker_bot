@@ -11,6 +11,9 @@ site_out/
 bots/
 tools/
 
+# The submission pickle (python -m submit --team phpirates) is committed.
+!phpirates.pkl
+
 # The front end (the results web page) is kept by the organiser, not here.
 /site/
 /site-src/
