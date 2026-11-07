@@ -84,6 +84,15 @@ class Model:
         except Exception:
             if self.debug:
                 raise
+        try:
+            # Every count fades a little each hand, so the statistics (and
+            # the labels, worked out from them at every decision) follow an
+            # opponent who changes. Nothing kept grows with hands played.
+            for stats in self.opp.values():
+                pk_opponent.decay(stats, self.params["stat_decay"])
+        except Exception:
+            if self.debug:
+                raise
 
     def opp_stats(self, gs, opp):
         """The statistics kept on the opponent's team (made on first use)."""

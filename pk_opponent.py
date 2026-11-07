@@ -5,7 +5,11 @@ exploits.
 
 A statistic is [hits, chances]; rate() gives (hits + k * prior) /
 (chances + k). Everything is plain dicts and lists, updated in end_game
-from the whole hand (its actions replayed) and the cards shown.
+from the whole hand (its actions replayed) and the cards shown, then every
+count is multiplied by the decay factor (decay), so recent hands weigh
+more. Only these counters are kept between hands: nothing grows with the
+number of hands played, and nothing loops over past hands. labels() is
+worked out afresh from the counts at every decision, never fixed.
 """
 
 from pk_cards import class_of
@@ -47,6 +51,19 @@ def new_stats():
     stats = {name: [0, 0] for name in PRIORS}
     stats["hands"] = 0
     return stats
+
+
+def decay(stats, factor):
+    """Multiplies every stored count by factor (end of each hand), so
+    recent hands weigh more: with 0.99 a hand 100 hands ago counts about
+    a third. Counts stay bounded (about 1 / (1 - factor) at most), and
+    "hands" too, so lam reflects the evidence still in the counts."""
+    for name, value in stats.items():
+        if name == "hands":
+            stats[name] = value * factor
+        else:
+            value[0] *= factor
+            value[1] *= factor
 
 
 def rate(stats, name, prior=None):

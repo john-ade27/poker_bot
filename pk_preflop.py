@@ -30,6 +30,7 @@ DEFAULTS = {
     "station_call_allin": 0.60,  # they call all-ins this often: shove
     "station_shove_ev": 0.5,  # for value when it wins this many bb
     "station_limp_pct": 0.85,  # and limp these hands otherwise
+    "stat_decay": 0.99,  # opponent counts are multiplied by this each hand
 }
 
 
